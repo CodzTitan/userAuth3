@@ -59,6 +59,7 @@ app.post('/signup', async (req, res) => {
 
     // Store the user in the "database"
     users.push(newUser);
+    console.log("Current Users:", users);
 
     console.log('User registered:', newUser.username);
     res.status(201).json({ message: 'User registered successfully' });
