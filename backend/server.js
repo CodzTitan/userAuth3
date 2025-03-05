@@ -1,41 +1,42 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const cors = require('cors'); // Import the cors middleware
-const app = express();
-
-// Load environment variables from .env file
+const cors = require('cors');
+const mongoose = require('mongoose'); // Import Mongoose
 require('dotenv').config();
 
-// Use environment variable for port, default to 3000 if not set
+const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware to parse JSON request bodies
+// CORS configuration (as before)
+
 app.use(express.json());
 
-// Enable CORS (Allow requests from your Netlify frontend domain)
-const allowedOrigins = [process.env.NETLIFY_DOMAIN]; // Replace with your Netlify URL
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+// MongoDB Connection
+mongoose.connect(process.env.MONGODB_URI, {  // Use environment variable for the connection string
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  //useCreateIndex: true,      //(node:14424) DeprecationWarning: Mongoose: the `useCreateIndex` option is deprecated
+  //useFindAndModify: false   //(node:14424) DeprecationWarning: Mongoose: `findOneAndUpdate()` and `findOneAndDelete()` without the `useFindAndModify` option set to false are deprecated
+})
+.then(() => console.log('Connected to MongoDB Atlas'))
+.catch(err => console.error('MongoDB connection error:', err));
 
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
+// User Schema and Model
+const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  password: {
+    type: String,
+    required: true
   }
-}));
+});
 
-// In-memory "database" for demonstration purposes
-const users = [];
+const User = mongoose.model('User', userSchema);
 
-// Helper function to find a user by username
-const findUser = (username) => {
-  return users.find(user => user.username === username);
-};
-
-// Signup Route
+// Signup Route (Updated)
 app.post('/signup', async (req, res) => {
   const { username, password } = req.body;
 
@@ -43,23 +44,16 @@ app.post('/signup', async (req, res) => {
     return res.status(400).json({ message: 'Username and password are required' });
   }
 
-  if (findUser(username)) {
-    return res.status(409).json({ message: 'Username already exists' });
-  }
-
   try {
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10); // 10 is the salt rounds
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(409).json({ message: 'Username already exists' });
+    }
 
-    // Create a new user object
-    const newUser = {
-      username: username,
-      password: hashedPassword,
-    };
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Store the user in the "database"
-    users.push(newUser);
-    console.log("Current Users:", users);
+    const newUser = new User({ username, password: hashedPassword });
+    await newUser.save(); // Save the user to the database
 
     console.log('User registered:', newUser.username);
     res.status(201).json({ message: 'User registered successfully' });
@@ -70,8 +64,7 @@ app.post('/signup', async (req, res) => {
   }
 });
 
-
-// Login Route
+// Login Route (Updated)
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
@@ -79,14 +72,13 @@ app.post('/login', async (req, res) => {
     return res.status(400).json({ message: 'Username and password are required' });
   }
 
-  const user = findUser(username);
-
-  if (!user) {
-    return res.status(401).json({ message: 'Invalid credentials' });
-  }
-
   try {
-    // Compare the provided password with the stored hashed password
+    const user = await User.findOne({ username });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
     const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (passwordMatch) {
@@ -100,8 +92,6 @@ app.post('/login', async (req, res) => {
   }
 });
 
-
-// Start the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
