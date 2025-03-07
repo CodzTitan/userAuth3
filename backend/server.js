@@ -39,9 +39,9 @@ const User = mongoose.model('User', userSchema);
 
 // Signup Route (Updated)
 app.post('/signup', async (req, res) => {
-  const { username, password } = req.body;
+  const { email, password } = req.body;
 
-  if (!username || !password) {
+  if (!email || !password) {
     return res.status(400).json({ message: 'Username and password are required' });
   }
 
